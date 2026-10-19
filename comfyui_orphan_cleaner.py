@@ -8,12 +8,13 @@ so you can reclaim disk space.
 Default  = DRY RUN: only prints a report, nothing is touched.
 --move   = moves the orphans into <models>/_orphan_models/ (same layout, easy to restore).
 --delete = PERMANENTLY deletes the orphans (asks you to type DELETE first).
+--purge  = PERMANENTLY deletes the _orphan_models folder left by --move (asks to confirm).
 
 The ComfyUI folder (the one that contains models/ and user/) is found
 automatically on Windows, macOS and Linux. To override it, pass it as an
 argument, set the COMFYUI_DIR environment variable, or edit COMFY_DIR below.
 
-  python comfyui_orphan_cleaner.py [COMFYUI_DIR] [--show-used] [--move | --delete]
+  python comfyui_orphan_cleaner.py [COMFYUI_DIR] [--show-used] [--move | --delete | --purge]
 
 Matching is done by file name only (the sub-folder is ignored), so it errs on
 the side of "this model is used". A model is an orphan only if its file name
@@ -161,6 +162,42 @@ def collect_refs(wf_dirs):
 
 
 # ----------------------------------------------------------------------------
+def purge_quarantine(model_dirs):
+    """Permanently delete the _orphan_models folder(s) that --move created."""
+    targets = []
+    for root in model_dirs:
+        q = root / QUARANTINE
+        if q.is_symlink() or not q.is_dir():
+            continue
+        files = [f for f in q.rglob("*") if f.is_file()]
+        targets.append((q, len(files), sum(f.stat().st_size for f in files)))
+    if not targets:
+        print(f"Nothing to purge: no '{QUARANTINE}' folder found.")
+        return
+    total = sum(t[2] for t in targets)
+    print("Folders to purge:")
+    for q, n, s in targets:
+        print(f"  {human(s):>10}  {n} file(s)  {q}")
+    print(f"\n!!! PERMANENT DELETE of {human(total)}. No Recycle Bin, this cannot be undone.")
+    print("!!! Close ComfyUI first.")
+    try:
+        answer = input("Type DELETE (all caps) to confirm, anything else cancels: ")
+    except EOFError:
+        answer = ""
+    if answer.strip() != "DELETE":
+        print("Cancelled. Nothing was deleted.")
+        return
+    freed = 0
+    for q, n, s in targets:
+        try:
+            shutil.rmtree(q)
+            freed += s
+            print(f"Deleted {q}")
+        except OSError as e:
+            print(f"  [FAILED] {q}: {e}")
+    print(f"Freed {human(freed)}.")
+
+
 def main():
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -184,11 +221,14 @@ def main():
     ap.add_argument("--delete", action="store_true",
                     help="PERMANENTLY delete the orphans to free disk space "
                          "(asks you to type DELETE first, no Recycle Bin)")
+    ap.add_argument("--purge", action="store_true",
+                    help=f"PERMANENTLY delete the {QUARANTINE} folder left by --move "
+                         "(asks you to type DELETE first)")
     ap.add_argument("--force", action="store_true",
                     help="Allow --move/--delete even if some workflow files could not be read")
     args = ap.parse_args()
-    if args.move and args.delete:
-        sys.exit("Use either --move or --delete, not both.")
+    if sum([args.move, args.delete, args.purge]) > 1:
+        sys.exit("Use only one of --move, --delete, --purge.")
 
     # Which ComfyUI folder?
     given = args.comfy_dir or os.environ.get("COMFYUI_DIR") or COMFY_DIR
@@ -213,6 +253,10 @@ def main():
     wf_dirs += [Path(p).expanduser() for p in args.extra_workflows]
 
     print(f"ComfyUI folder : {comfy}  ({how})")
+
+    if args.purge:
+        purge_quarantine(model_dirs)
+        return
 
     refs, ok, bad = collect_refs(wf_dirs)
     if ok == 0:
@@ -320,7 +364,7 @@ def main():
             failed += 1
             print(f"  [FAILED] {m['type']}/{m['rel']}: {e}")
     print(f"Moved {moved} file(s) = {human(moved_size)}; failed {failed}.")
-    print(f"To free the space: delete the {QUARANTINE} folder yourself.")
+    print(f"To free the space: run again with --purge (or delete the {QUARANTINE} folder yourself).")
     print("To restore a model: move it back to the same sub-folder under models/.")
 
 
