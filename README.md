@@ -40,9 +40,10 @@ ComfyUI models are huge (a single checkpoint can be 5-25 GB). After months of tr
    ```
    python comfyui_orphan_cleaner.py --move      # safe: moves orphans into models/_orphan_models
    python comfyui_orphan_cleaner.py --delete    # permanent: asks you to type DELETE
+   python comfyui_orphan_cleaner.py --purge     # permanent: empties models/_orphan_models later
    ```
 
-Tip: try `--move` first. If nothing breaks after a few days, delete the `_orphan_models` folder.
+Tip: try `--move` first. If nothing breaks after a few days, run `python comfyui_orphan_cleaner.py --purge` to delete the `_orphan_models` folder for good.
 
 ## Options
 
@@ -53,12 +54,13 @@ Tip: try `--move` first. If nothing breaks after a few days, delete the `_orphan
 | `--show-used` | Also list the models that are used, and which workflows use them. |
 | `--move` | Move orphans into `<models>/_orphan_models/`, keeping the folder layout. Nothing is deleted. |
 | `--delete` | **Permanently** delete orphans. You must type `DELETE` to confirm. No Recycle Bin. |
+| `--purge` | **Permanently** delete the `_orphan_models` folder left by an earlier `--move`. You must type `DELETE` to confirm. |
 | `--force` | Allow `--move` / `--delete` even if some workflow files could not be read. |
 | `--extra-models DIR` | Also scan another models folder (for `extra_model_paths.yaml` setups). Repeatable. |
 | `--extra-workflows DIR` | Also count workflow `.json` files in this folder as usage. Repeatable. |
 | `--skip a,b,c` | Model sub-folders to ignore. Default: `vae_approx,embeddings,configs`. |
 
-`--move` and `--delete` cannot be combined.
+`--move`, `--delete` and `--purge` cannot be combined.
 
 ## How it decides what is an orphan
 
@@ -91,7 +93,7 @@ A folder only counts if it contains `models/` and either `user/` or `main.py`. I
 
 ## Restoring
 
-Models moved with `--move` live in `<models>/_orphan_models/<type>/...`. To restore one, move it back to `<models>/<type>/...`.
+Models moved with `--move` live in `<models>/_orphan_models/<type>/...`. To restore one, move it back to `<models>/<type>/...`. To delete them for good, run `--purge`.
 
 ## Troubleshooting
 
